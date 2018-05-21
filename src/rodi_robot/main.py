@@ -5,9 +5,17 @@ from geometry_msgs.msg import Twist
 from sensor_msgs.msg import Range
 from rodi_robot.transport import Transport
 
+RODI_WHEEL_DIAMETER = 0.03
+RODI_WHEEL_SEPARATION = 0.08
+
+PI = 3.1415
+
+
+def rads_per_sec_to_rpm(velocity_in_rads):
+    return int(60 / (2 * PI) * velocity_in_rads)
+
 
 class RodiRobot(object):
-
     ''' Robot class to add ROS support to RoDI'''
 
     def __init__(self):
@@ -17,12 +25,8 @@ class RodiRobot(object):
 
         self.transport = Transport(hostname, port)
 
-        rospy.Subscriber('cmd_vel',
-                         Twist,
-                         self._cmd_vel_cb)
-        self.pub = rospy.Publisher('ultrasound',
-                                   Range,
-                                   queue_size=1)
+        rospy.Subscriber('cmd_vel', Twist, self._cmd_vel_cb)
+        self.pub = rospy.Publisher('ultrasound', Range, queue_size=1)
 
         self.rate = rospy.Rate(1)  # 1 Hz
 
@@ -37,7 +41,7 @@ class RodiRobot(object):
 
     def _cmd_vel_cb(self, msg):
         self.last_cmd_vel = rospy.Time.now()
-        if msg.angular.z == 0 and msg.linear.x == 0:
+        '''if msg.angular.z == 0 and msg.linear.x == 0:
             self.transport.stop()
         elif msg.linear.x > 0:
             self.transport.move_forward()
@@ -47,6 +51,23 @@ class RodiRobot(object):
             self.transport.move_left()
         elif msg.angular.z < 0:
             self.transport.move_right()
+        '''
+        left_wheel_velocity = msg.linear.x - msg.angular.z * (
+            RODI_WHEEL_SEPARATION / 2)
+        right_wheel_velocity = msg.linear.x + msg.angular.z * (
+            RODI_WHEEL_SEPARATION / 2)
+
+        left_wheel_angular_velocity = left_wheel_velocity / (
+            RODI_WHEEL_DIAMETER / 2)
+        right_wheel_angular_velocity = right_wheel_velocity / (
+            RODI_WHEEL_DIAMETER / 2)
+
+        rospy.logwarn("Left: %d" % rads_per_sec_to_rpm(left_wheel_angular_velocity))
+        rospy.logwarn("Right: %d" % rads_per_sec_to_rpm(right_wheel_angular_velocity))
+
+        self.transport.move(
+            rads_per_sec_to_rpm(left_wheel_angular_velocity),
+            rads_per_sec_to_rpm(right_wheel_angular_velocity))
 
     def run(self):
         while not rospy.is_shutdown():
